@@ -8,6 +8,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "ingest": "tsx src/jobs/runIngest.ts",
+    "digest": "tsx src/jobs/sendDigest.ts",
+    "followup": "tsx src/jobs/sendFollowup.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx test/bot.test.ts",
     "test:db": "tsx scripts/testDb.ts"

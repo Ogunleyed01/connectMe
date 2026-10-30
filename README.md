@@ -132,3 +132,38 @@ connectMe/
 ├── package.json
 └── tsconfig.json
 ```
+
+---
+
+## 🚀 Production Deployment Guide
+
+### Option 1: Render.com (Free 24/7 Background Worker)
+1. Fork or push your code to your GitHub account (`https://github.com/Ogunleyed01/connectMe.git`).
+2. Log in to [Render.com](https://render.com) and click **New + -> Background Worker**.
+3. Connect your `connectMe` GitHub repository.
+4. Render will auto-detect settings from `render.yaml`:
+   * **Build Command:** `npm ci && npm run build`
+   * **Start Command:** `npm start`
+5. In the **Environment Variables** section, add your 4 production keys:
+   * `BOT_TOKEN`
+   * `SUPABASE_URL`
+   * `SUPABASE_SERVICE_ROLE_KEY`
+   * `GEMINI_API_KEY`
+6. Click **Create Background Worker**. Your bot is now permanently online 24/7!
+
+### Option 2: Railway.app (1-Click Worker)
+1. Log in to [Railway.app](https://railway.app) and create a **New Project -> Deploy from GitHub repo**.
+2. Select `connectMe`. Railway detects the included `Dockerfile` or `Procfile`.
+3. Add your environment variables in the Railway dashboard (`Variables` tab).
+4. Click **Deploy**. The bot starts automatically.
+
+### Option 3: GitHub Actions Automated Daily Cron (08:00 WAT)
+The daily pipeline runs automatically in GitHub Actions for free every day at 08:00 WAT (07:00 UTC):
+1. In your GitHub repository, navigate to **Settings** -> **Secrets and variables** -> **Actions**.
+2. Under **Repository secrets**, click **New repository secret** and add:
+   * `BOT_TOKEN`
+   * `SUPABASE_URL`
+   * `SUPABASE_SERVICE_ROLE_KEY`
+   * `GEMINI_API_KEY`
+3. Go to the **Actions** tab, select **Daily Internship Scrape & 08:00 WAT Dispatch**, and click **Run workflow** to test it anytime!
+
