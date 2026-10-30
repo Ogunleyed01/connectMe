@@ -244,6 +244,31 @@ export function formatSettingsView(profile: UserProfileRecord): string {
   );
 }
 
+/**
+ * Pagination controller message for chunked digest
+ */
+export function formatDigestPaginationMessage(shownCount: number, totalCount: number): string {
+  const remaining = totalCount - shownCount;
+  return (
+    `📊 <b>Progress: ${shownCount} of ${totalCount} Opportunities Shown</b>\n\n` +
+    `<i>You've reviewed the first ${shownCount} matches. Tap below to load the next batch or view all ${remaining} remaining opportunities:</i>`
+  );
+}
+
+/**
+ * All opportunities completed message
+ */
+export function formatDigestCompleteMessage(totalCount: number): string {
+  return (
+    `🎉 <b>All ${totalCount} Opportunities Shown!</b>\n\n` +
+    `• Tap <b>🔗 Apply on Official Page</b> on your top picks.\n` +
+    `• Mark roles as <b>✅ Applied</b> so the bot can track your pipeline and schedule 7-day follow-ups.\n` +
+    `• Unacted roles will roll over tomorrow morning at <b>08:00 WAT</b>.\n\n` +
+    `<i>Use /stats to monitor your applications or /settings to refine your preferences.</i>`
+  );
+}
+
+
 function getDeadlineUrgency(deadlineStr: string): string {
   const deadline = new Date(deadlineStr);
   const diffTime = deadline.getTime() - Date.now();

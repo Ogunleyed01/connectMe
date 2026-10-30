@@ -8,6 +8,7 @@ import {
   buildOpportunityKeyboard,
   buildFollowupKeyboard,
   buildCustomCoursePromptKeyboard,
+  buildDigestPaginationKeyboard,
 } from "./keyboards.js";
 import {
   formatStartMessage,
@@ -21,6 +22,8 @@ import {
   formatNotEligibleCard,
   formatSkippedCard,
   formatStatsMessage,
+  formatDigestPaginationMessage,
+  formatDigestCompleteMessage,
 } from "./formatter.js";
 import {
   upsertUserProfile,
@@ -31,7 +34,11 @@ import {
   markInternshipDispatched,
   getUserStats,
   seedSampleInternships,
+  DigestItem,
 } from "../db/queries.js";
+
+// Cached active daily digest items per user for step-by-step pagination (5 first, then view more)
+const userDigestSessions = new Map<number, { items: DigestItem[]; timestamp: number }>();
 
 export function createBot(token: string = env.BOT_TOKEN): Bot<Context> {
   if (!token) {
@@ -398,11 +405,135 @@ export function createBot(token: string = env.BOT_TOKEN): Bot<Context> {
     });
   });
 
+  // Callback query: View stats
+  bot.callbackQuery(["cb:view_stats", "cb:stats"], async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!ctx.from) return;
+    const stats = await getUserStats(ctx.from.id);
+    await ctx.reply(formatStatsMessage(stats), {
+      parse_mode: "HTML",
+      reply_markup: buildCompletedKeyboard(),
+    });
+  });
+
+  // Callback query: Load Next 5 opportunities
+  bot.callbackQuery(/^dg:next:(\d+)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const offset = parseInt(ctx.match[1], 10);
+    const telegramId = ctx.from.id;
+
+    let session = userDigestSessions.get(telegramId);
+    let items = session?.items;
+
+    if (!items || items.length === 0) {
+      items = await getDailyUserDigest(telegramId, 20);
+      userDigestSessions.set(telegramId, { items, timestamp: Date.now() });
+    }
+
+    if (!items || offset >= items.length) {
+      await ctx.answerCallbackQuery({ text: "All opportunities already shown!" });
+      return;
+    }
+
+    await ctx.answerCallbackQuery({ text: "Loading next batch... 📄" });
+
+    // Update the controller message to remove its buttons and mark progress
+    try {
+      await ctx.editMessageText(
+        `✅ <i>Reviewed opportunities 1 to ${offset}</i>`,
+        { parse_mode: "HTML" }
+      );
+    } catch {
+      // Ignore if message could not be modified
+    }
+
+    const nextBatchEnd = Math.min(offset + 5, items.length);
+
+    for (let idx = offset; idx < nextBatchEnd; idx++) {
+      const item = items[idx];
+      const text = formatInternshipCard(item, idx + 1, items.length);
+      const keyboard = buildOpportunityKeyboard(item.short_id, item.apply_url);
+
+      const sentMsg = await ctx.reply(text, {
+        parse_mode: "HTML",
+        reply_markup: keyboard,
+        link_preview_options: { is_disabled: true },
+      });
+
+      await markInternshipDispatched(telegramId, item.id, sentMsg.message_id);
+      await new Promise((r) => setTimeout(r, 80));
+    }
+
+    if (nextBatchEnd < items.length) {
+      await ctx.reply(formatDigestPaginationMessage(nextBatchEnd, items.length), {
+        parse_mode: "HTML",
+        reply_markup: buildDigestPaginationKeyboard(nextBatchEnd, 5, items.length),
+      });
+    } else {
+      await ctx.reply(formatDigestCompleteMessage(items.length), {
+        parse_mode: "HTML",
+        reply_markup: buildCompletedKeyboard(),
+      });
+    }
+  });
+
+  // Callback query: View All Remaining opportunities
+  bot.callbackQuery(/^dg:all:(\d+)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const offset = parseInt(ctx.match[1], 10);
+    const telegramId = ctx.from.id;
+
+    let session = userDigestSessions.get(telegramId);
+    let items = session?.items;
+
+    if (!items || items.length === 0) {
+      items = await getDailyUserDigest(telegramId, 20);
+      userDigestSessions.set(telegramId, { items, timestamp: Date.now() });
+    }
+
+    if (!items || offset >= items.length) {
+      await ctx.answerCallbackQuery({ text: "All opportunities already shown!" });
+      return;
+    }
+
+    const remainingCount = items.length - offset;
+    await ctx.answerCallbackQuery({ text: `Loading all remaining ${remainingCount} opportunities... 🚀` });
+
+    try {
+      await ctx.editMessageText(
+        `✅ <i>Loading remaining ${remainingCount} opportunities...</i>`,
+        { parse_mode: "HTML" }
+      );
+    } catch {
+      // Ignore
+    }
+
+    for (let idx = offset; idx < items.length; idx++) {
+      const item = items[idx];
+      const text = formatInternshipCard(item, idx + 1, items.length);
+      const keyboard = buildOpportunityKeyboard(item.short_id, item.apply_url);
+
+      const sentMsg = await ctx.reply(text, {
+        parse_mode: "HTML",
+        reply_markup: keyboard,
+        link_preview_options: { is_disabled: true },
+      });
+
+      await markInternshipDispatched(telegramId, item.id, sentMsg.message_id);
+      await new Promise((r) => setTimeout(r, 80));
+    }
+
+    await ctx.reply(formatDigestCompleteMessage(items.length), {
+      parse_mode: "HTML",
+      reply_markup: buildCompletedKeyboard(),
+    });
+  });
+
   return bot;
 }
 
 /**
- * Dispatches the daily matched internships to the user
+ * Dispatches the daily matched internships to the user (5 first, then view more options)
  */
 async function sendUserDailyDigest(ctx: Context, telegramId: number) {
   let profile = await getUserProfile(telegramId);
@@ -432,20 +563,26 @@ async function sendUserDailyDigest(ctx: Context, telegramId: number) {
     return;
   }
 
+  // Cache user's daily items for paginated exploration
+  userDigestSessions.set(telegramId, { items, timestamp: Date.now() });
+
   const rollovers = items.filter((i) => i.is_rollover).length;
   const fresh = items.length - rollovers;
+  const initialBatchLimit = Math.min(5, items.length);
 
   await ctx.reply(
     `📬 <b>Your 2027 Daily Internship Digest</b>\n\n` +
     `Found <b>${items.length}</b> prioritized opportunities for today:\n` +
     `• 🔄 <b>Rollover (Unacted):</b> ${rollovers}\n` +
     `• 🆕 <b>Fresh Matches:</b> ${fresh}\n\n` +
-    `<i>Opportunities are prioritized by stipend & zero national ID requirement:</i>`,
+    (items.length > 5
+      ? `<i>Displaying top 5 matches first. Use the buttons below to explore at your own pace:</i>`
+      : `<i>Opportunities are prioritized by stipend & zero national ID requirement:</i>`),
     { parse_mode: "HTML" }
   );
 
-  // Send each card with its interactive keyboard
-  for (let idx = 0; idx < items.length; idx++) {
+  // Send the first batch (up to 5)
+  for (let idx = 0; idx < initialBatchLimit; idx++) {
     const item = items[idx];
     const text = formatInternshipCard(item, idx + 1, items.length);
     const keyboard = buildOpportunityKeyboard(item.short_id, item.apply_url);
@@ -458,5 +595,19 @@ async function sendUserDailyDigest(ctx: Context, telegramId: number) {
 
     // Record that this internship was dispatched to track rollover
     await markInternshipDispatched(telegramId, item.id, sentMsg.message_id);
+    await new Promise((r) => setTimeout(r, 80));
+  }
+
+  // If more than 5 exist, render pagination controller
+  if (items.length > 5) {
+    await ctx.reply(formatDigestPaginationMessage(5, items.length), {
+      parse_mode: "HTML",
+      reply_markup: buildDigestPaginationKeyboard(5, 5, items.length),
+    });
+  } else {
+    await ctx.reply(formatDigestCompleteMessage(items.length), {
+      parse_mode: "HTML",
+      reply_markup: buildCompletedKeyboard(),
+    });
   }
 }

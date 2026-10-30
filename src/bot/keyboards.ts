@@ -92,3 +92,28 @@ export function buildFollowupKeyboard(shortId: string): InlineKeyboard {
     .text("⏳ Still Waiting", `fup:wait:${shortId}`)
     .text("❌ Not Selected", `fup:rej:${shortId}`);
 }
+
+/**
+ * Navigation keyboard for chunked/paginated digest delivery (e.g. 5 first, then view more)
+ */
+export function buildDigestPaginationKeyboard(
+  currentOffset: number,
+  pageSize: number,
+  totalItems: number
+): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  const nextStart = currentOffset + 1;
+  const nextEnd = Math.min(currentOffset + pageSize, totalItems);
+  const remainingCount = totalItems - currentOffset;
+
+  if (remainingCount > 0) {
+    keyboard.text(`📄 Show Next ${nextEnd - currentOffset} (${nextStart} – ${nextEnd})`, `dg:next:${currentOffset}`);
+
+    if (remainingCount > pageSize) {
+      keyboard.row().text(`🚀 View All Remaining (${remainingCount})`, `dg:all:${currentOffset}`);
+    }
+  }
+
+  return keyboard;
+}
+

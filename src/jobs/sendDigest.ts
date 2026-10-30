@@ -6,8 +6,8 @@ import {
   markInternshipDispatched,
   seedSampleInternships,
 } from "../db/queries.js";
-import { formatInternshipCard } from "../bot/formatter.js";
-import { buildOpportunityKeyboard } from "../bot/keyboards.js";
+import { formatInternshipCard, formatDigestPaginationMessage } from "../bot/formatter.js";
+import { buildOpportunityKeyboard, buildDigestPaginationKeyboard } from "../bot/keyboards.js";
 
 async function runDailyDigestJob() {
   console.log("⏰ [Cron Job] Starting 08:00 WAT Daily 20 Digest dispatch...");
@@ -47,6 +47,7 @@ async function runDailyDigestJob() {
 
       const rollovers = items.filter((i) => i.is_rollover).length;
       const fresh = items.length - rollovers;
+      const initialBatch = Math.min(5, items.length);
 
       await bot.api.sendMessage(
         user.telegram_id,
@@ -54,11 +55,13 @@ async function runDailyDigestJob() {
         `Found <b>${items.length}</b> prioritized opportunities for today:\n` +
         `• 🔄 <b>Rollover (Unacted):</b> ${rollovers}\n` +
         `• 🆕 <b>Fresh Matches:</b> ${fresh}\n\n` +
-        `<i>Filtered for 2027 IT/SIWES intake period:</i>`,
+        (items.length > 5
+          ? `<i>Displaying top 5 matches first. Tap below to browse at your own pace:</i>`
+          : `<i>Filtered for 2027 IT/SIWES intake period:</i>`),
         { parse_mode: "HTML" }
       );
 
-      for (let idx = 0; idx < items.length; idx++) {
+      for (let idx = 0; idx < initialBatch; idx++) {
         const item = items[idx];
         const text = formatInternshipCard(item, idx + 1, items.length);
         const keyboard = buildOpportunityKeyboard(item.short_id, item.apply_url);
@@ -75,7 +78,19 @@ async function runDailyDigestJob() {
         await new Promise((r) => setTimeout(r, 100));
       }
 
-      console.log(`✅ Dispatched ${items.length} roles to user ${user.telegram_id}`);
+      // If more than 5 exist, render pagination controller
+      if (items.length > 5) {
+        await bot.api.sendMessage(
+          user.telegram_id,
+          formatDigestPaginationMessage(5, items.length),
+          {
+            parse_mode: "HTML",
+            reply_markup: buildDigestPaginationKeyboard(5, 5, items.length),
+          }
+        );
+      }
+
+      console.log(`✅ Dispatched initial batch of ${initialBatch}/${items.length} roles to user ${user.telegram_id}`);
     } catch (err: any) {
       console.error(`❌ Failed to send digest to user ${user.telegram_id}:`, err?.message || err);
     }

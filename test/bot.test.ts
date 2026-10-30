@@ -5,6 +5,7 @@ import {
   buildStipendKeyboard,
   buildOpportunityKeyboard,
   buildFollowupKeyboard,
+  buildDigestPaginationKeyboard,
 } from "../src/bot/keyboards.js";
 import {
   formatStartMessage,
@@ -16,6 +17,8 @@ import {
   formatNotEligibleCard,
   formatSkippedCard,
   formatStatsMessage,
+  formatDigestPaginationMessage,
+  formatDigestCompleteMessage,
 } from "../src/bot/formatter.js";
 import { COURSES, LOCATIONS, STIPENDS } from "../src/config/taxonomy.js";
 import {
@@ -61,6 +64,16 @@ async function runTests() {
 
   const fupKb = buildFollowupKeyboard("abcd1234");
   assert.strictEqual(fupKb.inline_keyboard.length, 2, "Follow-up keyboard should have 2 rows");
+
+  const pageKb = buildDigestPaginationKeyboard(5, 5, 20);
+  assert.strictEqual(pageKb.inline_keyboard.length, 2, "Pagination keyboard with remaining > 5 should have 2 rows");
+  assert.ok(pageKb.inline_keyboard[0][0].text.includes("6 – 10"), "Should show next 5 range");
+  assert.strictEqual(pageKb.inline_keyboard[0][0].callback_data, "dg:next:5");
+  assert.ok(pageKb.inline_keyboard[1][0].text.includes("Remaining (15)"), "Should show all remaining option");
+  assert.strictEqual(pageKb.inline_keyboard[1][0].callback_data, "dg:all:5");
+
+  const lastPageKb = buildDigestPaginationKeyboard(15, 5, 20);
+  assert.strictEqual(lastPageKb.inline_keyboard.length, 1, "Last page keyboard should only have 1 row (no duplicate view all)");
   console.log("   ✅ Keyboards structure validated.");
 
   // 3. Verify Deterministic Priority Scoring
@@ -151,7 +164,14 @@ async function runTests() {
     stipendKey: "preferred",
   });
   assert.ok(customCompMsg.includes("Biomedical Engineering"), "Custom course should display in completion message");
-  console.log("   ✅ Formatters, card templates, and custom courses validated.");
+
+  const paginationMsg = formatDigestPaginationMessage(5, 20);
+  assert.ok(paginationMsg.includes("5 of 20"), "Pagination message should display count");
+  assert.ok(paginationMsg.includes("15 remaining"), "Pagination message should display remaining count");
+
+  const completeMsg = formatDigestCompleteMessage(20);
+  assert.ok(completeMsg.includes("All 20 Opportunities Shown"), "Complete message should confirm finish");
+  console.log("   ✅ Formatters, card templates, pagination, and custom courses validated.");
 
   // 5. Verify Rollover Queue & State Transitions
   console.log("5️⃣ Verifying Daily 20 Rollover Queue & User State Machine...");
