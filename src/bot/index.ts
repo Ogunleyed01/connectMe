@@ -194,12 +194,34 @@ export function createBot(token: string = env.BOT_TOKEN): Bot<Context> {
     await ctx.reply(text, { parse_mode: "HTML" });
   });
 
+  // /myid or /id command: reveals user's numeric Telegram ID
+  bot.command(["myid", "id", "whoami"], async (ctx) => {
+    if (!ctx.from) return;
+    const adminId = env.ADMIN_TELEGRAM_ID;
+    const isAdmin = adminId && ctx.from.id === adminId;
+    await ctx.reply(
+      `🆔 <b>Your Telegram User ID:</b> <code>${ctx.from.id}</code>\n\n` +
+      `• <b>Username:</b> ${ctx.from.username ? `@${ctx.from.username}` : "None"}\n` +
+      `• <b>Admin Status:</b> ${isAdmin ? "Authorized Admin ✅" : "Standard User 👤"}\n\n` +
+      `<i>To authorize admin commands like /broadcast, set:</i>\n` +
+      `<code>ADMIN_TELEGRAM_ID=${ctx.from.id}</code> in your environment variables.`,
+      { parse_mode: "HTML" }
+    );
+  });
+
   // /broadcast or /announce command (Admin only)
   bot.command(["broadcast", "announce"], async (ctx) => {
     if (!ctx.from) return;
     const adminId = env.ADMIN_TELEGRAM_ID;
     if (!adminId || ctx.from.id !== adminId) {
-      await ctx.reply("⛔ This command is restricted to the bot administrator.");
+      await ctx.reply(
+        `⛔ <b>Admin Access Required</b>\n\n` +
+        `This command is restricted to the bot administrator.\n\n` +
+        `• <b>Your Telegram ID:</b> <code>${ctx.from.id}</code>\n\n` +
+        `<i>To authorize your account, add this to your Environment Variables on Render (or your .env file):</i>\n` +
+        `<code>ADMIN_TELEGRAM_ID=${ctx.from.id}</code>`,
+        { parse_mode: "HTML" }
+      );
       return;
     }
 
