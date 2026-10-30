@@ -25,10 +25,19 @@ let aiClient: GoogleGenAI | null = null;
 if (env.GEMINI_API_KEY) {
   try {
     aiClient = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
-    console.log("[Gemini] Structured parser initialized with Gemini 2.5 Flash.");
+    console.log("[Gemini] Structured parser initialized with Gemini Flash AI.");
   } catch (err) {
     console.warn("[Gemini] Could not initialize GoogleGenAI client:", err);
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Gemini request timed out after ${ms}ms`)), ms)
+    ),
+  ]);
 }
 
 /**
@@ -56,50 +65,66 @@ Job Text:
 ${rawText}
 `;
 
-      const response = await aiClient.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              company: { type: Type.STRING },
-              course_tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-              role_category: { type: Type.STRING },
-              tech_stack: { type: Type.ARRAY, items: { type: Type.STRING } },
-              location_category: {
-                type: Type.STRING,
-                enum: ["nigeria", "africa_remote", "overseas_remote", "overseas_relocate"],
-              },
-              work_mode: { type: Type.STRING, enum: ["remote", "onsite", "hybrid"] },
-              city_or_country: { type: Type.STRING },
-              has_stipend: { type: Type.BOOLEAN },
-              stipend_note: { type: Type.STRING },
-              requires_national_id: { type: Type.BOOLEAN },
-              id_requirement_note: { type: Type.STRING },
-              target_year: { type: Type.INTEGER },
-              start_date: { type: Type.STRING },
-              deadline: { type: Type.STRING },
-              summary_bullets: { type: Type.ARRAY, items: { type: Type.STRING } },
-            },
-            required: [
-              "title",
-              "company",
-              "course_tags",
-              "location_category",
-              "work_mode",
-              "has_stipend",
-              "requires_national_id",
-              "target_year",
-            ],
-          },
-        },
-      });
+      const candidateModels = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"];
+      let responseText: string | undefined;
 
-      if (response.text) {
-        const parsed = JSON.parse(response.text) as ParsedInternshipData;
+      for (const modelName of candidateModels) {
+        try {
+          const res = await withTimeout(
+            aiClient.models.generateContent({
+              model: modelName,
+              contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  company: { type: Type.STRING },
+                  course_tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  role_category: { type: Type.STRING },
+                  tech_stack: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  location_category: {
+                    type: Type.STRING,
+                    enum: ["nigeria", "africa_remote", "overseas_remote", "overseas_relocate"],
+                  },
+                  work_mode: { type: Type.STRING, enum: ["remote", "onsite", "hybrid"] },
+                  city_or_country: { type: Type.STRING },
+                  has_stipend: { type: Type.BOOLEAN },
+                  stipend_note: { type: Type.STRING },
+                  requires_national_id: { type: Type.BOOLEAN },
+                  id_requirement_note: { type: Type.STRING },
+                  target_year: { type: Type.INTEGER },
+                  start_date: { type: Type.STRING },
+                  deadline: { type: Type.STRING },
+                  summary_bullets: { type: Type.ARRAY, items: { type: Type.STRING } },
+                },
+                required: [
+                  "title",
+                  "company",
+                  "course_tags",
+                  "location_category",
+                  "work_mode",
+                  "has_stipend",
+                  "requires_national_id",
+                  "target_year",
+                ],
+              },
+            },
+          }), 8000);
+
+          if (res.text) {
+            responseText = res.text;
+            break;
+          }
+        } catch (err: any) {
+          // Try next active model if 404 or temporary spike
+          continue;
+        }
+      }
+
+      if (responseText) {
+        const parsed = JSON.parse(responseText) as ParsedInternshipData;
         return parsed;
       }
     } catch (err) {
