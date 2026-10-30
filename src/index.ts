@@ -1,3 +1,4 @@
+import http from "node:http";
 import { env } from "./config/env.js";
 import { createBot } from "./bot/index.js";
 import { seedSampleInternships } from "./db/queries.js";
@@ -24,11 +25,29 @@ async function main() {
     // Fetch bot info to confirm token validity
     const botInfo = await bot.api.getMe();
     console.log(`✅ Authenticated with Telegram as @${botInfo.username} (${botInfo.first_name})`);
+
+    // Start lightweight HTTP server for Render / Koyeb Web Service health checks (Free Tier)
+    const port = process.env.PORT || 8080;
+    const server = http.createServer((req, res) => {
+      if (req.url === "/health" || req.url === "/") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "ok", bot: `@${botInfo.username}` }));
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+
+    server.listen(port, () => {
+      console.log(`🌐 HTTP health-check server listening on port ${port} (Ready for Free Web Service hosting)`);
+    });
+
     console.log(`📡 Starting long-polling listener...`);
 
     // Handle graceful shutdown
     const handleShutdown = async (signal: string) => {
       console.log(`\n🛑 Received ${signal}. Stopping bot...`);
+      server.close();
       await bot.stop();
       process.exit(0);
     };

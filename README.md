@@ -137,19 +137,22 @@ connectMe/
 
 ## 🚀 Production Deployment Guide
 
-### Option 1: Render.com (Free 24/7 Background Worker)
-1. Fork or push your code to your GitHub account (`https://github.com/Ogunleyed01/connectMe.git`).
-2. Log in to [Render.com](https://render.com) and click **New + -> Background Worker**.
-3. Connect your `connectMe` GitHub repository.
-4. Render will auto-detect settings from `render.yaml`:
+### Option 1: Render.com (100% Free Web Service)
+1. Log in to [Render.com](https://render.com) and click **New + -> Web Service** (do **NOT** select Background Worker, as workers are paid).
+2. Connect your `connectMe` GitHub repository (`https://github.com/Ogunleyed01/connectMe.git`).
+3. Set the following fields:
+   * **Name:** `connectme-telegram-bot`
+   * **Language:** `Node`
    * **Build Command:** `npm ci && npm run build`
    * **Start Command:** `npm start`
-5. In the **Environment Variables** section, add your 4 production keys:
+   * **Instance Type / Plan:** Select **Free ($0/month)**.
+4. In the **Environment Variables** section, add your 4 production keys:
    * `BOT_TOKEN`
    * `SUPABASE_URL`
    * `SUPABASE_SERVICE_ROLE_KEY`
    * `GEMINI_API_KEY`
-6. Click **Create Background Worker**. Your bot is now permanently online 24/7!
+5. Click **Deploy Web Service**.
+6. *(Optional Tip)*: To prevent the free Render web service from sleeping after 15 minutes of inactivity, create a free monitor at [UptimeRobot.com](https://uptimerobot.com) pointing to your Render URL (e.g. `https://connectme-telegram-bot.onrender.com/health`) every 10 minutes. This keeps it alive 24/7 at \$0 cost!
 
 ### Option 2: Railway.app (1-Click Worker)
 1. Log in to [Railway.app](https://railway.app) and create a **New Project -> Deploy from GitHub repo**.
