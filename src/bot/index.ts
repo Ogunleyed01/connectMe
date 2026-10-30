@@ -9,6 +9,9 @@ import {
   buildFollowupKeyboard,
   buildCustomCoursePromptKeyboard,
   buildDigestPaginationKeyboard,
+  buildCarouselKeyboard,
+  buildCarouselActionConfirmationKeyboard,
+  buildCarouselCompletedKeyboard,
 } from "./keyboards.js";
 import {
   formatStartMessage,
@@ -24,6 +27,10 @@ import {
   formatStatsMessage,
   formatDigestPaginationMessage,
   formatDigestCompleteMessage,
+  formatCarouselCard,
+  formatCarouselAppliedConfirmation,
+  formatCarouselRejectConfirmation,
+  formatCarouselCompleteMessage,
 } from "./formatter.js";
 import {
   upsertUserProfile,
@@ -529,11 +536,273 @@ export function createBot(token: string = env.BOT_TOKEN): Bot<Context> {
     });
   });
 
+  // =========================================================================
+  // SINGLE-CARD INTERACTIVE CAROUSEL HANDLERS (Dynamic In-Place Pager)
+  // =========================================================================
+
+  // No-op for disabled page boundaries
+  bot.callbackQuery("noop", async (ctx) => {
+    await ctx.answerCallbackQuery();
+  });
+
+  // Tap on page counter badge
+  bot.callbackQuery(/^car:status:(\d+)$/, async (ctx) => {
+    const idx = parseInt(ctx.match[1], 10);
+    await ctx.answerCallbackQuery({ text: `Viewing opportunity ${idx + 1}` });
+  });
+
+  // Flip through cards: Previous / Next
+  bot.callbackQuery(/^car:nav:(prev|next):(\d+)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const direction = ctx.match[1];
+    const currentIndex = parseInt(ctx.match[2], 10);
+    const telegramId = ctx.from.id;
+
+    let session = userDigestSessions.get(telegramId);
+    let items = session?.items;
+
+    if (!items || items.length === 0) {
+      items = await getDailyUserDigest(telegramId, 20);
+      userDigestSessions.set(telegramId, { items, timestamp: Date.now() });
+    }
+
+    if (!items || items.length === 0) {
+      await ctx.answerCallbackQuery({ text: "No active opportunities." });
+      return;
+    }
+
+    const targetIndex = direction === "next" ? currentIndex + 1 : currentIndex - 1;
+    if (targetIndex < 0 || targetIndex >= items.length) {
+      await ctx.answerCallbackQuery({ text: "Reached the end of the carousel." });
+      return;
+    }
+
+    await ctx.answerCallbackQuery();
+
+    const targetItem = items[targetIndex];
+    await ctx.editMessageText(
+      formatCarouselCard(targetItem, targetIndex, items.length),
+      {
+        parse_mode: "HTML",
+        reply_markup: buildCarouselKeyboard(
+          targetIndex,
+          items.length,
+          targetItem.short_id,
+          targetItem.apply_url
+        ),
+        link_preview_options: { is_disabled: true },
+      }
+    );
+
+    await markInternshipDispatched(telegramId, targetItem.id, ctx.callbackQuery.message?.message_id);
+  });
+
+  // Direct Jump to a specific opportunity index
+  bot.callbackQuery(/^car:jump:(\d+)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const targetIndex = parseInt(ctx.match[1], 10);
+    const telegramId = ctx.from.id;
+
+    let session = userDigestSessions.get(telegramId);
+    let items = session?.items;
+
+    if (!items || items.length === 0) {
+      items = await getDailyUserDigest(telegramId, 20);
+      userDigestSessions.set(telegramId, { items, timestamp: Date.now() });
+    }
+
+    if (!items || targetIndex >= items.length) {
+      await ctx.answerCallbackQuery({ text: "All opportunities reviewed!" });
+      return;
+    }
+
+    await ctx.answerCallbackQuery();
+
+    const targetItem = items[targetIndex];
+    await ctx.editMessageText(
+      formatCarouselCard(targetItem, targetIndex, items.length),
+      {
+        parse_mode: "HTML",
+        reply_markup: buildCarouselKeyboard(
+          targetIndex,
+          items.length,
+          targetItem.short_id,
+          targetItem.apply_url
+        ),
+        link_preview_options: { is_disabled: true },
+      }
+    );
+
+    await markInternshipDispatched(telegramId, targetItem.id, ctx.callbackQuery.message?.message_id);
+  });
+
+  // Carousel Action: User clicked Applied
+  bot.callbackQuery(/^car:apply:([^:]+):(\d+)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const shortId = ctx.match[1];
+    const currentIndex = parseInt(ctx.match[2], 10);
+    const telegramId = ctx.from.id;
+
+    const internship = await getInternshipByShortId(shortId);
+    if (!internship) {
+      await ctx.answerCallbackQuery({ text: "Opportunity not found." });
+      return;
+    }
+
+    await ctx.answerCallbackQuery({ text: "🎉 Application recorded! Saved to your pipeline." });
+
+    await updateApplicationStatus(telegramId, shortId, "applied", {
+      telegramMessageId: ctx.callbackQuery.message?.message_id,
+    });
+
+    let session = userDigestSessions.get(telegramId);
+    const totalCount = session?.items?.length || 20;
+    const nextIndex = currentIndex + 1 < totalCount ? currentIndex + 1 : null;
+
+    await ctx.editMessageText(
+      formatCarouselAppliedConfirmation(internship, nextIndex, totalCount),
+      {
+        parse_mode: "HTML",
+        reply_markup: buildCarouselActionConfirmationKeyboard(nextIndex, totalCount),
+      }
+    );
+  });
+
+  // Carousel Action: User clicked Not Eligible
+  bot.callbackQuery(/^car:rej:([^:]+):(\d+)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const shortId = ctx.match[1];
+    const currentIndex = parseInt(ctx.match[2], 10);
+    const telegramId = ctx.from.id;
+
+    const internship = await getInternshipByShortId(shortId);
+    if (!internship) {
+      await ctx.answerCallbackQuery({ text: "Opportunity not found." });
+      return;
+    }
+
+    await ctx.answerCallbackQuery({ text: "Archived as not eligible." });
+
+    await updateApplicationStatus(telegramId, shortId, "not_eligible", {
+      telegramMessageId: ctx.callbackQuery.message?.message_id,
+    });
+
+    let session = userDigestSessions.get(telegramId);
+    const totalCount = session?.items?.length || 20;
+    const nextIndex = currentIndex + 1 < totalCount ? currentIndex + 1 : null;
+
+    await ctx.editMessageText(
+      formatCarouselRejectConfirmation(internship, nextIndex, totalCount),
+      {
+        parse_mode: "HTML",
+        reply_markup: buildCarouselActionConfirmationKeyboard(nextIndex, totalCount),
+      }
+    );
+  });
+
+  // Carousel Action: User clicked Skip for Tomorrow
+  bot.callbackQuery(/^car:skip:([^:]+):(\d+)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const shortId = ctx.match[1];
+    const currentIndex = parseInt(ctx.match[2], 10);
+    const telegramId = ctx.from.id;
+
+    const internship = await getInternshipByShortId(shortId);
+    if (internship) {
+      await updateApplicationStatus(telegramId, shortId, "sent", {
+        telegramMessageId: ctx.callbackQuery.message?.message_id,
+      });
+    }
+
+    let session = userDigestSessions.get(telegramId);
+    let items = session?.items;
+
+    if (!items || items.length === 0) {
+      items = await getDailyUserDigest(telegramId, 20);
+      userDigestSessions.set(telegramId, { items, timestamp: Date.now() });
+    }
+
+    const nextIndex = currentIndex + 1;
+    if (items && nextIndex < items.length) {
+      await ctx.answerCallbackQuery({ text: "Skipped for today. Showing next..." });
+      const nextItem = items[nextIndex];
+      await ctx.editMessageText(
+        formatCarouselCard(nextItem, nextIndex, items.length),
+        {
+          parse_mode: "HTML",
+          reply_markup: buildCarouselKeyboard(
+            nextIndex,
+            items.length,
+            nextItem.short_id,
+            nextItem.apply_url
+          ),
+          link_preview_options: { is_disabled: true },
+        }
+      );
+      await markInternshipDispatched(telegramId, nextItem.id, ctx.callbackQuery.message?.message_id);
+    } else {
+      await ctx.answerCallbackQuery({ text: "You've reviewed all opportunities!" });
+      await ctx.editMessageText(
+        formatCarouselCompleteMessage(items ? items.length : 20),
+        {
+          parse_mode: "HTML",
+          reply_markup: buildCarouselCompletedKeyboard(),
+        }
+      );
+    }
+  });
+
+  // Carousel Action: Start Over from Card 1
+  bot.callbackQuery("car:first", async (ctx) => {
+    if (!ctx.from) return;
+    const telegramId = ctx.from.id;
+
+    let session = userDigestSessions.get(telegramId);
+    let items = session?.items;
+
+    if (!items || items.length === 0) {
+      items = await getDailyUserDigest(telegramId, 20);
+      userDigestSessions.set(telegramId, { items, timestamp: Date.now() });
+    }
+
+    if (!items || items.length === 0) {
+      await ctx.answerCallbackQuery({ text: "No opportunities to show." });
+      return;
+    }
+
+    await ctx.answerCallbackQuery({ text: "Restarting from Card 1" });
+    const firstItem = items[0];
+    await ctx.editMessageText(
+      formatCarouselCard(firstItem, 0, items.length),
+      {
+        parse_mode: "HTML",
+        reply_markup: buildCarouselKeyboard(0, items.length, firstItem.short_id, firstItem.apply_url),
+        link_preview_options: { is_disabled: true },
+      }
+    );
+  });
+
+  // Carousel Action: View completion summary
+  bot.callbackQuery("car:finish", async (ctx) => {
+    if (!ctx.from) return;
+    const session = userDigestSessions.get(ctx.from.id);
+    const totalCount = session?.items?.length || 20;
+
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText(
+      formatCarouselCompleteMessage(totalCount),
+      {
+        parse_mode: "HTML",
+        reply_markup: buildCarouselCompletedKeyboard(),
+      }
+    );
+  });
+
   return bot;
 }
 
 /**
- * Dispatches the daily matched internships to the user (5 first, then view more options)
+ * Dispatches the daily matched internships to the user using the Single-Card Carousel (Zero-Clutter)
  */
 async function sendUserDailyDigest(ctx: Context, telegramId: number) {
   let profile = await getUserProfile(telegramId);
@@ -563,51 +832,25 @@ async function sendUserDailyDigest(ctx: Context, telegramId: number) {
     return;
   }
 
-  // Cache user's daily items for paginated exploration
+  // Cache user's daily items for lightning-fast carousel flipping
   userDigestSessions.set(telegramId, { items, timestamp: Date.now() });
 
-  const rollovers = items.filter((i) => i.is_rollover).length;
-  const fresh = items.length - rollovers;
-  const initialBatchLimit = Math.min(5, items.length);
-
-  await ctx.reply(
-    `📬 <b>Your 2027 Daily Internship Digest</b>\n\n` +
-    `Found <b>${items.length}</b> prioritized opportunities for today:\n` +
-    `• 🔄 <b>Rollover (Unacted):</b> ${rollovers}\n` +
-    `• 🆕 <b>Fresh Matches:</b> ${fresh}\n\n` +
-    (items.length > 5
-      ? `<i>Displaying top 5 matches first. Use the buttons below to explore at your own pace:</i>`
-      : `<i>Opportunities are prioritized by stipend & zero national ID requirement:</i>`),
-    { parse_mode: "HTML" }
+  // Send EXACTLY ONE message: The first opportunity card in the interactive carousel
+  const firstItem = items[0];
+  const text = formatCarouselCard(firstItem, 0, items.length);
+  const keyboard = buildCarouselKeyboard(
+    0,
+    items.length,
+    firstItem.short_id,
+    firstItem.apply_url
   );
 
-  // Send the first batch (up to 5)
-  for (let idx = 0; idx < initialBatchLimit; idx++) {
-    const item = items[idx];
-    const text = formatInternshipCard(item, idx + 1, items.length);
-    const keyboard = buildOpportunityKeyboard(item.short_id, item.apply_url);
+  const sentMsg = await ctx.reply(text, {
+    parse_mode: "HTML",
+    reply_markup: keyboard,
+    link_preview_options: { is_disabled: true },
+  });
 
-    const sentMsg = await ctx.reply(text, {
-      parse_mode: "HTML",
-      reply_markup: keyboard,
-      link_preview_options: { is_disabled: true },
-    });
-
-    // Record that this internship was dispatched to track rollover
-    await markInternshipDispatched(telegramId, item.id, sentMsg.message_id);
-    await new Promise((r) => setTimeout(r, 80));
-  }
-
-  // If more than 5 exist, render pagination controller
-  if (items.length > 5) {
-    await ctx.reply(formatDigestPaginationMessage(5, items.length), {
-      parse_mode: "HTML",
-      reply_markup: buildDigestPaginationKeyboard(5, 5, items.length),
-    });
-  } else {
-    await ctx.reply(formatDigestCompleteMessage(items.length), {
-      parse_mode: "HTML",
-      reply_markup: buildCompletedKeyboard(),
-    });
-  }
+  // Record that this card was dispatched
+  await markInternshipDispatched(telegramId, firstItem.id, sentMsg.message_id);
 }

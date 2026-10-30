@@ -268,6 +268,116 @@ export function formatDigestCompleteMessage(totalCount: number): string {
   );
 }
 
+/**
+ * Formats a single opportunity card inside the carousel view
+ */
+export function formatCarouselCard(
+  item: DigestItem,
+  currentIndex: number,
+  totalCount: number
+): string {
+  const intakeBadge = item.is_rollover
+    ? "🔄 <b>Rollover (Unacted)</b>"
+    : "🆕 <b>Fresh Match</b>";
+
+  const stipendBadge = item.has_stipend
+    ? `💰 <b>Stipend:</b> ${escapeHtml(item.stipend_note || "Paid Placement")}`
+    : `💰 <b>Stipend:</b> Unspecified / Unpaid`;
+
+  const idBadge = item.requires_national_id === false
+    ? `🛡️ <b>ID Requirement:</b> Zero passport/national ID upfront <i>(Student ID accepted)</i>`
+    : `🛡️ <b>ID Requirement:</b> Valid national passport or work authorization required`;
+
+  const urgency = item.deadline ? getDeadlineUrgency(item.deadline) : "";
+  const deadlineStr = item.deadline
+    ? `📅 <b>Deadline:</b> ${item.deadline} ${urgency}`
+    : `📅 <b>Deadline:</b> Rolling Admissions`;
+
+  const startDateStr = item.start_date
+    ? `🚀 <b>Expected Start:</b> ${item.start_date}`
+    : `🚀 <b>Intake Period:</b> 2027 IT / SIWES & Summer`;
+
+  const bullets =
+    item.summary_bullets && item.summary_bullets.length > 0
+      ? `<b>Highlights & Responsibilities:</b>\n` +
+        item.summary_bullets.map((b) => `• ${escapeHtml(b)}`).join("\n") +
+        "\n\n"
+      : "";
+
+  const techStack =
+    item.tech_stack && item.tech_stack.length > 0
+      ? `🛠️ <b>Tech Stack:</b> ${item.tech_stack.map((t) => `<code>${escapeHtml(t)}</code>`).join(", ")}\n\n`
+      : "";
+
+  return (
+    `💼 <b>${escapeHtml(item.title)}</b>\n` +
+    `🏢 <b>${escapeHtml(item.company)}</b>\n\n` +
+    `📑 <i>Card ${currentIndex + 1} of ${totalCount} • ${intakeBadge} • Score: ${item.priority_score}/100</i>\n` +
+    `──────────────────────────\n` +
+    `📍 <b>Location:</b> ${escapeHtml(item.city_or_country)} (${item.work_mode})\n` +
+    `${stipendBadge}\n` +
+    `${idBadge}\n` +
+    `${deadlineStr}\n` +
+    `${startDateStr}\n\n` +
+    `${techStack}` +
+    `${bullets}` +
+    `<i>Use buttons below to apply, track, or flip through cards in place:</i>`
+  );
+}
+
+/**
+ * In-place card confirmation when an opportunity is marked as Applied in carousel
+ */
+export function formatCarouselAppliedConfirmation(
+  item: InternshipRecord,
+  nextIndex: number | null,
+  totalCount: number
+): string {
+  return (
+    `🎉 <b>Application Logged!</b>\n\n` +
+    `🏢 <b>${escapeHtml(item.company)}</b>\n` +
+    `💼 <i>${escapeHtml(item.title)}</i>\n\n` +
+    `✅ We've recorded this in your personal application pipeline.\n` +
+    `⏰ An automated follow-up check-in will trigger in <b>7 days</b> to track interview updates.\n\n` +
+    (nextIndex !== null && nextIndex < totalCount
+      ? `<i>Tap below to continue to opportunity ${nextIndex + 1} of ${totalCount}:</i>`
+      : `<i>You've reviewed all opportunities for today!</i>`)
+  );
+}
+
+/**
+ * In-place card confirmation when marked Not Eligible in carousel
+ */
+export function formatCarouselRejectConfirmation(
+  item: InternshipRecord,
+  nextIndex: number | null,
+  totalCount: number
+): string {
+  return (
+    `❌ <b>Archived as Not Eligible</b>\n\n` +
+    `🏢 <b>${escapeHtml(item.company)}</b>\n` +
+    `💼 <i>${escapeHtml(item.title)}</i>\n\n` +
+    `This opportunity has been archived from your daily queue.\n\n` +
+    (nextIndex !== null && nextIndex < totalCount
+      ? `<i>Tap below to view opportunity ${nextIndex + 1} of ${totalCount}:</i>`
+      : `<i>You've reviewed all opportunities for today!</i>`)
+  );
+}
+
+/**
+ * Completion card when user reaches end of carousel
+ */
+export function formatCarouselCompleteMessage(totalCount: number): string {
+  return (
+    `🎉 <b>You've Reviewed All ${totalCount} Opportunities!</b>\n\n` +
+    `• Your responses have been saved and your application pipeline is updated.\n` +
+    `• Any opportunities you skipped will roll over tomorrow morning at <b>08:00 WAT</b>.\n` +
+    `• Fresh postings discovered by our daily scrapers will be added automatically.\n\n` +
+    `<i>Use the buttons below to review your stats, restart from Card 1, or adjust your preferences:</i>`
+  );
+}
+
+
 
 function getDeadlineUrgency(deadlineStr: string): string {
   const deadline = new Date(deadlineStr);

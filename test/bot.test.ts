@@ -6,6 +6,9 @@ import {
   buildOpportunityKeyboard,
   buildFollowupKeyboard,
   buildDigestPaginationKeyboard,
+  buildCarouselKeyboard,
+  buildCarouselActionConfirmationKeyboard,
+  buildCarouselCompletedKeyboard,
 } from "../src/bot/keyboards.js";
 import {
   formatStartMessage,
@@ -19,6 +22,10 @@ import {
   formatStatsMessage,
   formatDigestPaginationMessage,
   formatDigestCompleteMessage,
+  formatCarouselCard,
+  formatCarouselAppliedConfirmation,
+  formatCarouselRejectConfirmation,
+  formatCarouselCompleteMessage,
 } from "../src/bot/formatter.js";
 import { COURSES, LOCATIONS, STIPENDS } from "../src/config/taxonomy.js";
 import {
@@ -74,7 +81,23 @@ async function runTests() {
 
   const lastPageKb = buildDigestPaginationKeyboard(15, 5, 20);
   assert.strictEqual(lastPageKb.inline_keyboard.length, 1, "Last page keyboard should only have 1 row (no duplicate view all)");
-  console.log("   ✅ Keyboards structure validated.");
+
+  // Carousel Keyboards
+  const carKbFirst = buildCarouselKeyboard(0, 20, "abcd1234", "https://example.com");
+  assert.strictEqual(carKbFirst.inline_keyboard.length, 4, "Carousel keyboard should have 4 rows");
+  assert.ok(carKbFirst.inline_keyboard[0][1].text.includes("1 / 20"), "Pager should show card 1/20");
+  assert.strictEqual(carKbFirst.inline_keyboard[0][2].callback_data, "car:nav:next:0");
+
+  const carKbMiddle = buildCarouselKeyboard(5, 20, "abcd1234", "https://example.com");
+  assert.strictEqual(carKbMiddle.inline_keyboard[0][0].callback_data, "car:nav:prev:5");
+  assert.strictEqual(carKbMiddle.inline_keyboard[0][2].callback_data, "car:nav:next:5");
+
+  const carConfirmKb = buildCarouselActionConfirmationKeyboard(1, 20);
+  assert.strictEqual(carConfirmKb.inline_keyboard.length, 2, "Action confirmation should have next and utility rows");
+
+  const carCompletedKb = buildCarouselCompletedKeyboard();
+  assert.strictEqual(carCompletedKb.inline_keyboard.length, 2, "Completed keyboard should have 2 rows");
+  console.log("   ✅ Keyboards structure (including Single-Card Carousel) validated.");
 
   // 3. Verify Deterministic Priority Scoring
   console.log("3️⃣ Verifying deterministic priority scorer...");
@@ -171,7 +194,22 @@ async function runTests() {
 
   const completeMsg = formatDigestCompleteMessage(20);
   assert.ok(completeMsg.includes("All 20 Opportunities Shown"), "Complete message should confirm finish");
-  console.log("   ✅ Formatters, card templates, pagination, and custom courses validated.");
+
+  // Carousel Card Formatters
+  const carCardHtml = formatCarouselCard(mockItem, 0, 20);
+  assert.ok(carCardHtml.includes("Card 1 of 20"), "Carousel card should display position");
+  assert.ok(carCardHtml.includes("Google Africa"), "Carousel card should display company");
+
+  const carAppliedHtml = formatCarouselAppliedConfirmation(mockItem, 1, 20);
+  assert.ok(carAppliedHtml.includes("Application Logged!"), "Carousel applied confirms submission");
+
+  const carRejectHtml = formatCarouselRejectConfirmation(mockItem, 1, 20);
+  assert.ok(carRejectHtml.includes("Archived as Not Eligible"), "Carousel reject confirms archive");
+
+  const carCompleteHtml = formatCarouselCompleteMessage(20);
+  assert.ok(carCompleteHtml.includes("You've Reviewed All 20 Opportunities"), "Carousel completion confirms review");
+
+  console.log("   ✅ Formatters, card templates, pagination, carousel, and custom courses validated.");
 
   // 5. Verify Rollover Queue & State Transitions
   console.log("5️⃣ Verifying Daily 20 Rollover Queue & User State Machine...");

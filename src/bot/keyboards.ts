@@ -117,3 +117,87 @@ export function buildDigestPaginationKeyboard(
   return keyboard;
 }
 
+/**
+ * Single-Card Carousel Keyboard:
+ * - Row 1: Flipping buttons: [ ⬅️ Prev ] [ 📍 3 / 20 ] [ Next ➡️ ]
+ * - Row 2: Official Apply Link
+ * - Row 3: Action buttons: [ ✅ Applied ] [ ❌ Not Eligible ] [ ⏭️ Skip ]
+ * - Row 4: Shortcuts: [ 📊 Stats ] [ ⚙️ Filters ]
+ */
+export function buildCarouselKeyboard(
+  currentIndex: number,
+  totalCount: number,
+  shortId: string,
+  applyUrl: string
+): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+
+  // Row 1: Navigation Pager
+  const pageLabel = `📍 ${currentIndex + 1} / ${totalCount}`;
+  if (totalCount > 1) {
+    if (currentIndex > 0) {
+      keyboard.text("⬅️ Prev", `car:nav:prev:${currentIndex}`);
+    } else {
+      keyboard.text("• First", "noop");
+    }
+
+    keyboard.text(pageLabel, `car:status:${currentIndex}`);
+
+    if (currentIndex < totalCount - 1) {
+      keyboard.text("Next ➡️", `car:nav:next:${currentIndex}`);
+    } else {
+      keyboard.text("• Last", "noop");
+    }
+    keyboard.row();
+  }
+
+  // Row 2: Official Apply Link
+  keyboard.url("🔗 Apply on Official Page", applyUrl).row();
+
+  // Row 3: 1-Click State Actions
+  keyboard
+    .text("✅ Applied", `car:apply:${shortId}:${currentIndex}`)
+    .text("❌ Not Eligible", `car:rej:${shortId}:${currentIndex}`)
+    .text("⏭️ Skip", `car:skip:${shortId}:${currentIndex}`)
+    .row();
+
+  // Row 4: Utility navigation
+  keyboard
+    .text("📊 My Stats", "cb:view_stats")
+    .text("⚙️ Settings", "cb:view_settings");
+
+  return keyboard;
+}
+
+/**
+ * Keyboard shown after user records an action (Applied / Not Eligible) in carousel
+ */
+export function buildCarouselActionConfirmationKeyboard(
+  nextIndex: number | null,
+  totalCount: number
+): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  if (nextIndex !== null && nextIndex < totalCount) {
+    keyboard.text(`➡️ View Next Opportunity (${nextIndex + 1}/${totalCount})`, `car:jump:${nextIndex}`).row();
+  } else {
+    keyboard.text("🎉 View Completion Summary", "car:finish").row();
+  }
+  keyboard
+    .text("📊 My Stats", "cb:view_stats")
+    .text("⚙️ Settings", "cb:view_settings");
+
+  return keyboard;
+}
+
+/**
+ * Keyboard when user reaches the end of the carousel
+ */
+export function buildCarouselCompletedKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("🔄 Start Over from Card 1", "car:first")
+    .row()
+    .text("📊 View My Stats", "cb:view_stats")
+    .text("⚙️ Change Preferences", "cb:start");
+}
+
+
