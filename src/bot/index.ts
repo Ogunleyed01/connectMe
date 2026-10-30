@@ -43,9 +43,27 @@ import {
   seedSampleInternships,
   DigestItem,
 } from "../db/queries.js";
+import { broadcastMessage } from "../jobs/broadcast.js";
+
+import { limit } from "@grammyjs/ratelimiter";
+import { apiThrottler } from "@grammyjs/transformer-throttler";
 
 // Cached active daily digest items per user for step-by-step pagination (5 first, then view more)
 const userDigestSessions = new Map<number, { items: DigestItem[]; timestamp: number }>();
+
+// Periodic session cleanup (every 15 mins) to prevent memory growth
+const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+if (typeof setInterval !== "undefined") {
+  const cleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [id, session] of userDigestSessions.entries()) {
+      if (now - session.timestamp > SESSION_TTL_MS) {
+        userDigestSessions.delete(id);
+      }
+    }
+  }, 15 * 60 * 1000);
+  cleanupTimer.unref?.();
+}
 
 export function createBot(token: string = env.BOT_TOKEN): Bot<Context> {
   if (!token) {
@@ -55,6 +73,32 @@ export function createBot(token: string = env.BOT_TOKEN): Bot<Context> {
   }
 
   const bot = new Bot(token);
+
+  // 1. Outgoing API Throttler to prevent Telegram 429 Flood Wait errors
+  bot.api.config.use(apiThrottler());
+
+  // 2. Incoming Rate Limiter: max 5 requests per 2 seconds per user
+  bot.use(
+    limit({
+      timeFrame: 2000,
+      limit: 5,
+      onLimitExceeded: async (ctx) => {
+        try {
+          if (ctx.callbackQuery) {
+            await ctx.answerCallbackQuery({
+              text: "⏳ Please slow down! Too many requests.",
+              show_alert: true,
+            });
+          } else {
+            await ctx.reply("⏳ Please slow down! Too many requests.");
+          }
+        } catch {
+          // Ignore network or flood errors during limit responses
+        }
+      },
+      keyGenerator: (ctx) => ctx.from?.id.toString(),
+    })
+  );
 
   // In-flight custom course onboarding sessions per user
   const userSessions = new Map<number, { awaitingCustomCourse?: boolean; courseKey?: string; customCourseName?: string }>();
@@ -80,9 +124,9 @@ export function createBot(token: string = env.BOT_TOKEN): Bot<Context> {
     const session = userSessions.get(ctx.from.id);
 
     if (session?.awaitingCustomCourse && !ctx.message.text.startsWith("/")) {
-      const customName = ctx.message.text.trim();
+      const customName = ctx.message.text.trim().slice(0, 80);
       if (customName.length < 2) {
-        await ctx.reply("Please enter a valid course of study (at least 2 letters):");
+        await ctx.reply("Please enter a valid course of study (between 2 and 80 characters):");
         return;
       }
 
@@ -148,6 +192,48 @@ export function createBot(token: string = env.BOT_TOKEN): Bot<Context> {
       `<i>Daily batch of up to 20 roles is dispatched automatically at 08:00 WAT. Unacted roles rollover each morning.</i>`;
 
     await ctx.reply(text, { parse_mode: "HTML" });
+  });
+
+  // /broadcast or /announce command (Admin only)
+  bot.command(["broadcast", "announce"], async (ctx) => {
+    if (!ctx.from) return;
+    const adminId = env.ADMIN_TELEGRAM_ID;
+    if (!adminId || ctx.from.id !== adminId) {
+      await ctx.reply("⛔ This command is restricted to the bot administrator.");
+      return;
+    }
+
+    const rawText = ctx.message?.text || "";
+    const messageText = rawText.replace(/^\/(broadcast|announce)\s*/i, "").trim();
+    if (!messageText) {
+      await ctx.reply(
+        "📢 <b>Admin Broadcast Usage:</b>\n\n" +
+        "Send: <code>/broadcast Your announcement text here</code>\n\n" +
+        "<i>This will instantly push a notification with your announcement to all registered subscribers.</i>",
+        { parse_mode: "HTML" }
+      );
+      return;
+    }
+
+    const progressMsg = await ctx.reply("📡 Dispatching announcement to all subscribers...");
+    try {
+      const res = await broadcastMessage(messageText, { showDigestButton: true });
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        progressMsg.message_id,
+        `📢 <b>Broadcast Complete!</b>\n\n` +
+        `• 👥 <b>Target Subscribers:</b> ${res.total}\n` +
+        `• ✅ <b>Successfully Delivered:</b> ${res.successCount}\n` +
+        `• ❌ <b>Failed / Blocked:</b> ${res.failureCount}`,
+        { parse_mode: "HTML" }
+      );
+    } catch (err: any) {
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        progressMsg.message_id,
+        `❌ Broadcast failed: ${err?.message || err}`
+      );
+    }
   });
 
   // Callback query: Restart flow

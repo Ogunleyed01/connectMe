@@ -11,6 +11,8 @@ jobs:
     name: Run Scrape, Ingest & Daily Digest
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout Code

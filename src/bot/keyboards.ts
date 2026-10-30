@@ -1,5 +1,6 @@
 import { InlineKeyboard } from "grammy";
 import { COURSES, LOCATIONS, STIPENDS } from "../config/taxonomy.js";
+import { sanitizeApplyUrl } from "../utils/security.js";
 
 /**
  * Builds the Step 1 keyboard: Course of Study selection
@@ -72,8 +73,9 @@ export function buildCompletedKeyboard(): InlineKeyboard {
  * - State machine buttons: Applied, Not Eligible, Skip for Tomorrow
  */
 export function buildOpportunityKeyboard(shortId: string, applyUrl: string): InlineKeyboard {
+  const safeUrl = sanitizeApplyUrl(applyUrl);
   return new InlineKeyboard()
-    .url("🔗 Apply on Official Page", applyUrl)
+    .url("🔗 Apply on Official Page", safeUrl)
     .row()
     .text("✅ Applied", `app:apply:${shortId}`)
     .text("❌ Not Eligible", `app:reject:${shortId}`)
@@ -131,6 +133,7 @@ export function buildCarouselKeyboard(
   applyUrl: string
 ): InlineKeyboard {
   const keyboard = new InlineKeyboard();
+  const safeUrl = sanitizeApplyUrl(applyUrl);
 
   // Row 1: Navigation Pager
   const pageLabel = `📍 ${currentIndex + 1} / ${totalCount}`;
@@ -152,7 +155,7 @@ export function buildCarouselKeyboard(
   }
 
   // Row 2: Official Apply Link
-  keyboard.url("🔗 Apply on Official Page", applyUrl).row();
+  keyboard.url("🔗 Apply on Official Page", safeUrl).row();
 
   // Row 3: 1-Click State Actions
   keyboard

@@ -1,5 +1,6 @@
 import { COURSES, LOCATIONS, STIPENDS } from "../config/taxonomy.js";
 import { UserProfileRecord, DigestItem, InternshipRecord } from "../db/queries.js";
+import { sanitizeApplyUrl } from "../utils/security.js";
 
 /**
  * Step 1: Course of Study selection message
@@ -155,6 +156,7 @@ export function formatInternshipCard(item: DigestItem, index?: number, total?: n
  */
 export function formatAppliedCard(item: InternshipRecord, appliedAt: Date = new Date()): string {
   const dateStr = appliedAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const safeUrl = sanitizeApplyUrl(item.apply_url);
   return (
     `✅ <b>APPLICATION LOGGED!</b>\n\n` +
     `🏢 <b>Company:</b> ${escapeHtml(item.company)}\n` +
@@ -162,7 +164,7 @@ export function formatAppliedCard(item: InternshipRecord, appliedAt: Date = new 
     `📅 <b>Applied Date:</b> ${dateStr}\n\n` +
     `🎯 <i>Great job taking action!</i>\n` +
     `🔔 <b>Automated 7-Day Follow-Up:</b> We'll send you a check-in reminder in 7 days to see if you have interview updates or offer news.\n\n` +
-    `🔗 <a href="${item.apply_url}">View Application Reference</a>`
+    `🔗 <a href="${escapeHtml(safeUrl)}">View Application Reference</a>`
   );
 }
 
@@ -391,7 +393,8 @@ function getDeadlineUrgency(deadlineStr: string): string {
   return `(${diffDays} days left)`;
 }
 
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
+  if (!text || typeof text !== "string") return "";
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

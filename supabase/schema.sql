@@ -296,3 +296,45 @@ BEGIN
   LIMIT p_limit;
 END;
 $$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- 5. ROW LEVEL SECURITY (RLS) POLICIES
+-- Protects database tables from public anon access via PostgREST
+-- ============================================================================
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE internships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_applications ENABLE ROW LEVEL SECURITY;
+
+-- Deny public anon access to sensitive user data
+CREATE POLICY "Deny public access to users"
+  ON users FOR ALL
+  TO anon
+  USING (false);
+
+-- Deny public modifications to internship listings
+CREATE POLICY "Deny public modifications to internships"
+  ON internships FOR INSERT
+  TO anon
+  WITH CHECK (false);
+
+CREATE POLICY "Deny public updates to internships"
+  ON internships FOR UPDATE
+  TO anon
+  USING (false);
+
+CREATE POLICY "Deny public deletes to internships"
+  ON internships FOR DELETE
+  TO anon
+  USING (false);
+
+-- Allow public read-only access to active internships (useful if exposing public catalog)
+CREATE POLICY "Allow anon read active internships"
+  ON internships FOR SELECT
+  TO anon
+  USING (is_active = true);
+
+-- Deny public anon access to user applications pipeline
+CREATE POLICY "Deny public access to user_applications"
+  ON user_applications FOR ALL
+  TO anon
+  USING (false);

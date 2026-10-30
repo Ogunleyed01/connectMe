@@ -6,6 +6,7 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().url().optional().or(z.literal("")),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().or(z.literal("")),
   GEMINI_API_KEY: z.string().optional().or(z.literal("")),
+  ADMIN_TELEGRAM_ID: z.coerce.number().optional(),
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
@@ -28,6 +29,7 @@ function loadEnv(): Env {
       SUPABASE_URL: cleanSupabaseUrl(process.env.SUPABASE_URL),
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
       GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
+      ADMIN_TELEGRAM_ID: process.env.ADMIN_TELEGRAM_ID ? Number(process.env.ADMIN_TELEGRAM_ID) : undefined,
       PORT: Number(process.env.PORT) || 3000,
       NODE_ENV: (process.env.NODE_ENV as "development" | "production" | "test") || "development",
     };

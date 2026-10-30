@@ -29,12 +29,24 @@ async function main() {
     // Start lightweight HTTP server for Render / Koyeb Web Service health checks (Free Tier)
     const port = process.env.PORT || 8080;
     const server = http.createServer((req, res) => {
+      // Hardened basic security headers
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("X-Frame-Options", "DENY");
+      res.setHeader("Content-Security-Policy", "default-src 'none'");
+
+      // Only respond to GET and HEAD health probes
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        res.writeHead(405, { "Content-Type": "text/plain" });
+        res.end("Method Not Allowed");
+        return;
+      }
+
       if (req.url === "/health" || req.url === "/") {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ status: "ok", bot: `@${botInfo.username}` }));
       } else {
-        res.writeHead(404);
-        res.end();
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not Found");
       }
     });
 

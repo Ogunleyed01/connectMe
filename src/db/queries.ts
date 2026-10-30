@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { supabase } from "./client.js";
 import { COURSES, LOCATIONS, STIPENDS } from "../config/taxonomy.js";
 import { calculatePriorityScore } from "../ingest/scorer.js";
+import { sanitizeApplyUrl } from "../utils/security.js";
 
 export type LocationCategory = "nigeria" | "africa_remote" | "overseas_remote" | "overseas_relocate";
 export type WorkMode = "remote" | "onsite" | "hybrid";
@@ -193,7 +194,8 @@ export async function upsertInternship(
     priority_score?: number;
   }
 ): Promise<InternshipRecord> {
-  const url_hash = data.url_hash || generateUrlHash(data.apply_url);
+  const safeApplyUrl = sanitizeApplyUrl(data.apply_url);
+  const url_hash = data.url_hash || generateUrlHash(safeApplyUrl);
 
   // Check if this url_hash already exists in memory
   let existingId = data.id;
@@ -239,6 +241,7 @@ export async function upsertInternship(
 
   const record: InternshipRecord = {
     ...data,
+    apply_url: safeApplyUrl,
     id,
     short_id,
     url_hash,

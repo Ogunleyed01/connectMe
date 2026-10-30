@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { isValidHttpsUrl, sanitizeApplyUrl, boundString } from "../src/utils/security.js";
 import {
   buildCourseKeyboard,
   buildLocationKeyboard,
@@ -295,7 +296,20 @@ async function runTests() {
   assert.strictEqual(stats.applied, 1, "Stats should show 1 applied");
   console.log("   ✅ Daily 20 rollover queue and state machine validated.");
 
-  console.log("\n🎉 All 5 test suites passed flawlessly!");
+  // 6. Verify Security Utilities
+  console.log("6️⃣ Verifying security utilities (URL validation, SSRF checks, sanitization)...");
+  assert.strictEqual(isValidHttpsUrl("https://careers.google.com/jobs/123"), true, "Valid HTTPS URL must pass");
+  assert.strictEqual(isValidHttpsUrl("http://insecure-site.com"), false, "Plain HTTP must be rejected");
+  assert.strictEqual(isValidHttpsUrl("javascript:alert(1)"), false, "JavaScript URI must be rejected");
+  assert.strictEqual(isValidHttpsUrl("https://localhost:8080/exploit"), false, "Localhost must be rejected");
+  assert.strictEqual(isValidHttpsUrl("https://127.0.0.1:3000"), false, "127.0.0.1 must be rejected");
+  assert.strictEqual(isValidHttpsUrl("https://169.254.169.254/latest/meta-data"), false, "Cloud metadata IP must be rejected");
+  assert.strictEqual(isValidHttpsUrl("https://192.168.1.1/admin"), false, "Private LAN IP must be rejected");
+  assert.strictEqual(sanitizeApplyUrl("http://insecure.com", "https://t.me"), "https://t.me", "Invalid URL must fall back to safe URL");
+  assert.strictEqual(boundString("  Hello World  ", 5), "Hello", "boundString must trim and cap length");
+  console.log("   ✅ Security utilities validated.");
+
+  console.log("\n🎉 All 6 test suites passed flawlessly!");
 }
 
 runTests().catch((err) => {

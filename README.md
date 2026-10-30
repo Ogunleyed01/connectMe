@@ -51,6 +51,7 @@ npm start
 | `/digest` | Receive today's batch of up to 20 matched opportunities immediately |
 | `/stats` | View application pipeline metrics (Applied, Interviewing, Offered, etc.) |
 | `/settings` or `/filter` | Review or reconfigure your active internship preferences |
+| `/broadcast <text>` | *(Admin only)* Push an announcement to all active subscribers |
 | `/help` | Display command guide and daily digest overview |
 
 ---
@@ -96,6 +97,9 @@ npx tsx src/jobs/sendDigest.ts
 
 # Trigger 7-day post-application follow-up check-in scan
 npx tsx src/jobs/sendFollowup.ts
+
+# Broadcast push announcements to all active subscribers
+npm run broadcast -- "🚀 40 new internships added for 2027!"
 ```
 
 ---

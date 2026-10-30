@@ -11,6 +11,7 @@
     "ingest": "tsx src/jobs/runIngest.ts",
     "digest": "tsx src/jobs/sendDigest.ts",
     "followup": "tsx src/jobs/sendFollowup.ts",
+    "broadcast": "tsx src/jobs/broadcast.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx test/bot.test.ts",
     "test:db": "tsx scripts/testDb.ts"
@@ -27,6 +28,8 @@
   "license": "MIT",
   "dependencies": {
     "@google/genai": "^2.32.0",
+    "@grammyjs/ratelimiter": "^1.2.1",
+    "@grammyjs/transformer-throttler": "^1.2.1",
     "@supabase/supabase-js": "^2.49.1",
     "dotenv": "^16.4.7",
     "grammy": "^1.35.0",
