@@ -1,0 +1,53 @@
+name: Daily Internship Scrape & 08:00 WAT Dispatch
+
+on:
+  schedule:
+    # 07:00 UTC corresponds to 08:00 WAT (West Africa Time, UTC+1)
+    - cron: '0 7 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  pipeline:
+    name: Run Scrape, Ingest & Daily Digest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (v22)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Verify Types & Build
+        run: |
+          npm run typecheck
+          npm run build
+
+      - name: Step 1 - Ingest & Scrape 2027 Opportunities
+        run: npx tsx src/jobs/runIngest.ts
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Step 2 - Dispatch Daily 20 Digest (08:00 WAT)
+        run: npx tsx src/jobs/sendDigest.ts
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      - name: Step 3 - Send Automated 7-Day Application Follow-Ups
+        run: npx tsx src/jobs/sendFollowup.ts
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

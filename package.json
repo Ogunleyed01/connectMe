@@ -1,0 +1,37 @@
+{
+  "name": "connect-me-intern-tracker",
+  "version": "1.0.0",
+  "description": "Telegram bot tracking 2027 internship opportunities with daily digest & smart filters",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx test/bot.test.ts",
+    "test:db": "tsx scripts/testDb.ts"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "grammy",
+    "internship",
+    "2027",
+    "siwes"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@google/genai": "^2.32.0",
+    "@supabase/supabase-js": "^2.49.1",
+    "dotenv": "^16.4.7",
+    "grammy": "^1.35.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
