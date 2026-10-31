@@ -27,7 +27,7 @@ async function main() {
     console.log(`✅ Authenticated with Telegram as @${botInfo.username} (${botInfo.first_name})`);
 
     // Start lightweight HTTP server for Render / Koyeb Web Service health checks (Free Tier)
-    const port = process.env.PORT || 8080;
+    const port = Number(process.env.PORT) || 8080;
     const server = http.createServer((req, res) => {
       // Hardened basic security headers
       res.setHeader("X-Content-Type-Options", "nosniff");
@@ -50,7 +50,7 @@ async function main() {
       }
     });
 
-    server.listen(port, () => {
+    server.listen(port, "0.0.0.0", () => {
       console.log(`🌐 HTTP health-check server listening on port ${port} (Ready for Free Web Service hosting)`);
     });
 
