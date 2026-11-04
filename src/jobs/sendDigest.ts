@@ -17,7 +17,6 @@ async function runDailyDigestJob() {
     process.exit(1);
   }
 
-  await seedSampleInternships();
   const bot = createBot(env.BOT_TOKEN);
 
   // Retrieve all active users

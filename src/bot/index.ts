@@ -925,9 +925,6 @@ async function sendUserDailyDigest(ctx: Context, telegramId: number) {
     return;
   }
 
-  // Ensure samples are seeded
-  await seedSampleInternships();
-
   const items = await getDailyUserDigest(telegramId, profile.daily_limit || 20);
 
   if (items.length === 0) {

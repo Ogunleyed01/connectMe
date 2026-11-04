@@ -3,6 +3,7 @@ import { scrapeNigerianTechJobs } from "./nigerianTech.js";
 import { scrapeGitHub2027Internships } from "./github2027.js";
 import { scrapeGreenhouseJobs } from "./greenhouse.js";
 import { scrapeLeverJobs } from "./lever.js";
+import { scrapeRemoteTechInternships } from "./remoteApis.js";
 
 export async function fetchAllInternshipSources(): Promise<ScrapedJobListing[]> {
   console.log("==================================================");
@@ -17,6 +18,7 @@ export async function fetchAllInternshipSources(): Promise<ScrapedJobListing[]> 
     { name: "GitHub 2027 Repositories", fn: scrapeGitHub2027Internships },
     { name: "Greenhouse Public Boards", fn: scrapeGreenhouseJobs },
     { name: "Lever Public Boards", fn: scrapeLeverJobs },
+    { name: "Global Remote APIs", fn: scrapeRemoteTechInternships },
   ];
 
   for (const scraper of scrapers) {

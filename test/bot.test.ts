@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { isValidHttpsUrl, sanitizeApplyUrl, boundString } from "../src/utils/security.js";
+import { isValidHttpsUrl, isPlaceholderOrMockUrl, sanitizeApplyUrl, boundString } from "../src/utils/security.js";
+import { verifyJobUrl } from "../src/utils/urlVerifier.js";
+import { supabase } from "../src/db/client.js";
 import {
   buildCourseKeyboard,
   buildLocationKeyboard,
@@ -43,6 +45,13 @@ import { calculatePriorityScore } from "../src/ingest/scorer.js";
 
 async function runTests() {
   console.log("🧪 Running Comprehensive Test Suite for 2027 Internship Bot...\n");
+
+  // Clean up any old test records first
+  if (supabase) {
+    await supabase.from("internships").delete().eq("source_name", "test");
+    await supabase.from("users").delete().eq("telegram_id", 7770001);
+    await supabase.from("users").delete().eq("telegram_id", 8881234);
+  }
 
   // 1. Verify Taxonomy
   console.log("1️⃣ Verifying taxonomy definitions...");
@@ -305,9 +314,23 @@ async function runTests() {
   assert.strictEqual(isValidHttpsUrl("https://127.0.0.1:3000"), false, "127.0.0.1 must be rejected");
   assert.strictEqual(isValidHttpsUrl("https://169.254.169.254/latest/meta-data"), false, "Cloud metadata IP must be rejected");
   assert.strictEqual(isValidHttpsUrl("https://192.168.1.1/admin"), false, "Private LAN IP must be rejected");
+  assert.strictEqual(isValidHttpsUrl("https://example.com/apply"), false, "Example.com must be rejected as blocked hostname");
+  assert.strictEqual(isPlaceholderOrMockUrl("https://example.com/role-1"), true, "example.com must be identified as mock URL");
+  assert.strictEqual(isPlaceholderOrMockUrl("https://careers.google.com/jobs/1"), false, "Real URL must not be mock");
   assert.strictEqual(sanitizeApplyUrl("http://insecure.com", "https://t.me"), "https://t.me", "Invalid URL must fall back to safe URL");
   assert.strictEqual(boundString("  Hello World  ", 5), "Hello", "boundString must trim and cap length");
-  console.log("   ✅ Security utilities validated.");
+
+  // Verify URL verifier
+  const mockCheck = await verifyJobUrl("https://example.com/test");
+  assert.strictEqual(mockCheck.isValid, false, "verifyJobUrl must reject example.com");
+  console.log("   ✅ Security & URL verification utilities validated.");
+
+  // Post-test cleanup: ensure test records do not pollute production database
+  if (supabase) {
+    await supabase.from("internships").delete().eq("source_name", "test");
+    await supabase.from("users").delete().eq("telegram_id", testUserId);
+    await supabase.from("users").delete().eq("telegram_id", 8881234);
+  }
 
   console.log("\n🎉 All 6 test suites passed flawlessly!");
 }

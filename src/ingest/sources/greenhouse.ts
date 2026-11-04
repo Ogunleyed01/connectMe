@@ -1,18 +1,22 @@
 import { ScrapedJobListing } from "./types.js";
+import { isGenuineInternship, detectTargetYear } from "../matcher.js";
+import { batchVerifyUrls } from "../../utils/urlVerifier.js";
 
-// Tech companies on Greenhouse with global remote / EMEA technical internship programs
+// Top technology companies on Greenhouse with active student internships
 const GREENHOUSE_BOARDS = [
-  "canonical",
+  "figma",
+  "lyft",
   "cloudflare",
-  "gitlab",
-  "automattic",
+  "canonical",
   "datadog",
   "mongodb",
+  "stripe",
+  "elastic",
 ];
 
 export async function scrapeGreenhouseJobs(): Promise<ScrapedJobListing[]> {
-  console.log("🌿 [Scraper: Greenhouse] Querying public company boards...");
-  const listings: ScrapedJobListing[] = [];
+  console.log("🌿 [Scraper: Greenhouse] Querying verified company boards for 2027/2026 internships...");
+  const candidates: ScrapedJobListing[] = [];
 
   for (const board of GREENHOUSE_BOARDS) {
     try {
@@ -21,7 +25,7 @@ export async function scrapeGreenhouseJobs(): Promise<ScrapedJobListing[]> {
       const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const res = await fetch(url, {
-        headers: { "User-Agent": "ConnectMe-InternTracker-Bot/1.0" },
+        headers: { "User-Agent": "ConnectMe-InternTracker-Bot/2.0" },
         signal: controller.signal,
       });
 
@@ -34,51 +38,50 @@ export async function scrapeGreenhouseJobs(): Promise<ScrapedJobListing[]> {
 
       for (const job of jobs) {
         const title = (job.title || "").trim();
-        const lowerTitle = title.toLowerCase();
 
-        // Check if role is an internship
-        if (
-          lowerTitle.includes("intern") ||
-          lowerTitle.includes("internship") ||
-          lowerTitle.includes("co-op") ||
-          lowerTitle.includes("student") ||
-          lowerTitle.includes("apprentice")
-        ) {
-          const location = job.location?.name || "Global Remote";
-          const applyUrl = job.absolute_url;
+        // Strict qualification: rejects "Internal Auditor", etc.
+        if (!isGenuineInternship(title, job.content)) {
+          continue;
+        }
 
-          // Strip HTML tags for clean rawText
-          const cleanDesc = (job.content || "")
-            .replace(/<[^>]*>/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
+        const location = job.location?.name || "Global Remote";
+        const applyUrl = job.absolute_url;
+        if (!applyUrl || typeof applyUrl !== "string") continue;
 
-          const companyName = capitalize(board);
+        const cleanDesc = (job.content || "")
+          .replace(/<[^>]*>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
 
-          listings.push({
-            company: companyName,
-            title,
-            source: `greenhouse_${board}`,
-            applyUrl,
-            locationHint: location,
-            rawText: `
+        const companyName = capitalize(board);
+        const targetYear = detectTargetYear(title, cleanDesc);
+
+        candidates.push({
+          company: companyName,
+          title,
+          source: `greenhouse_${board}`,
+          applyUrl,
+          locationHint: location,
+          rawText: `
 Company: ${companyName}
 Title: ${title}
 Location: ${location}
-Target Intake: 2027 IT / Summer Internship
+Target Intake: ${targetYear} Summer Internship / IT Placement
 Application Link: ${applyUrl}
 Description: ${cleanDesc.slice(0, 1500)}
-            `.trim(),
-          });
-        }
+          `.trim(),
+        });
       }
     } catch (err: any) {
       console.warn(`[Greenhouse Scraper] Could not fetch ${board}: ${err?.message || err}`);
     }
   }
 
-  console.log(`🌿 [Greenhouse Scraper] Found ${listings.length} verified internship positions.`);
-  return listings;
+  // Live URL verification step
+  console.log(`🌿 [Greenhouse Scraper] Verifying link liveness for ${candidates.length} candidates...`);
+  const verified = await batchVerifyUrls(candidates, 5, 5000);
+  console.log(`🌿 [Greenhouse Scraper] Found ${verified.length} verified live internship positions.`);
+  return verified;
 }
 
 function capitalize(s: string): string {

@@ -10,7 +10,38 @@ const BLOCKED_HOSTNAMES = new Set([
   "0.0.0.0",
   "metadata.google.internal",
   "169.254.169.254", // Cloud metadata service IP
+  "example.com",
+  "example.org",
+  "example.net",
+  "example.edu",
+  "test.com",
 ]);
+
+/**
+ * Checks if a candidate URL points to a placeholder or mock domain (e.g. example.com).
+ */
+export function isPlaceholderOrMockUrl(urlString?: string | null): boolean {
+  if (!urlString || typeof urlString !== "string") return true;
+  try {
+    const parsed = new URL(urlString.trim());
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === "example.com" ||
+      host.endsWith(".example.com") ||
+      host === "example.org" ||
+      host.endsWith(".example.org") ||
+      host === "example.net" ||
+      host === "test.com" ||
+      host === "localhost" ||
+      host === "127.0.0.1"
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
 
 /**
  * Validates that a candidate URL is a safe, publicly resolvable HTTPS address.

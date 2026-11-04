@@ -1,19 +1,21 @@
 import { ScrapedJobListing } from "./types.js";
+import { isGenuineInternship, detectTargetYear } from "../matcher.js";
+import { batchVerifyUrls } from "../../utils/urlVerifier.js";
 
-const SIMPLIFY_JSON_URL =
-  "https://raw.githubusercontent.com/SimplifyJobs/Summer2025-Internships/dev/.github/scripts/listings.json";
+const SIMPLIFY_2027_JSON_URL =
+  "https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/.github/scripts/listings.json";
 
 export async function scrapeGitHub2027Internships(): Promise<ScrapedJobListing[]> {
-  console.log("🐙 [Scraper: GitHub] Querying community internship tracking repos...");
-  const listings: ScrapedJobListing[] = [];
+  console.log("🐙 [Scraper: GitHub 2027] Querying verified Summer 2027 community directory...");
+  const candidates: ScrapedJobListing[] = [];
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-    const res = await fetch(SIMPLIFY_JSON_URL, {
+    const res = await fetch(SIMPLIFY_2027_JSON_URL, {
       headers: {
-        "User-Agent": "ConnectMe-InternTracker-Bot/1.0",
+        "User-Agent": "ConnectMe-InternTracker-Bot/2.0",
         Accept: "application/json",
       },
       signal: controller.signal,
@@ -25,55 +27,72 @@ export async function scrapeGitHub2027Internships(): Promise<ScrapedJobListing[]
       const data = (await res.json()) as any[];
 
       if (Array.isArray(data)) {
-        // Filter for active, visible tech internships
-        const candidates = data.filter((item) => {
+        // Filter for active, visible tech internships targeting 2027 / Summer
+        const filtered = data.filter((item) => {
           if (item.active === false || item.is_visible === false) return false;
-          const title = (item.title || "").toLowerCase();
-          return (
-            title.includes("intern") ||
-            title.includes("internship") ||
-            title.includes("co-op") ||
-            title.includes("student")
-          );
+          if (!item.url || typeof item.url !== "string" || !item.url.startsWith("http")) return false;
+
+          const title = item.title || "";
+          if (!isGenuineInternship(title)) return false;
+
+          // Check terms: prioritize 2027, 2026/2027
+          const terms = Array.isArray(item.terms) ? item.terms.join(" ") : "";
+          const is2027 =
+            terms.includes("2027") ||
+            terms.includes("2026") ||
+            title.includes("2027") ||
+            (item.date_posted && item.date_posted > 1700000000);
+
+          return is2027;
         });
 
-        // Pick top 25 fresh candidate roles per run
-        const selected = candidates.slice(0, 25);
+        // Sort by newest date_posted first
+        filtered.sort((a, b) => (b.date_posted || 0) - (a.date_posted || 0));
 
-        for (const item of selected) {
-          const company = (item.company_name || "").trim() || "Technology Company";
+        // Take top 40 candidates for live URL verification
+        const pool = filtered.slice(0, 40);
+
+        for (const item of pool) {
+          const company = (item.company_name || "").trim() || "Technology Organization";
           const title = (item.title || "").trim();
-          const applyUrl = (item.url || "").trim();
+          const applyUrl = item.url.trim();
           const locations = Array.isArray(item.locations) ? item.locations.join(", ") : "Remote / Global";
           const category = item.category || "Software Engineering";
           const sponsorship = item.sponsorship || "Not Specified";
+          const targetYear = detectTargetYear(title, `${termsText(item.terms)} 2027`);
 
-          if (applyUrl.startsWith("http")) {
-            listings.push({
-              company,
-              title,
-              source: "github_simplify_tracker",
-              applyUrl,
-              locationHint: locations,
-              rawText: `
+          candidates.push({
+            company,
+            title,
+            source: "github_simplify_2027",
+            applyUrl,
+            locationHint: locations,
+            rawText: `
 Company: ${company}
-Role: ${title}
+Title: ${title}
 Category: ${category}
 Location: ${locations}
 Sponsorship: ${sponsorship}
-Target: 2027 IT / Summer Internship Cohort
+Target Cohort: ${targetYear} Summer / Industrial Training
 Application Link: ${applyUrl}
-              `.trim(),
-            });
-          }
+            `.trim(),
+          });
         }
-
-        console.log(`🐙 [GitHub Scraper] Extracted ${listings.length} verified candidate roles from SimplifyJobs directory.`);
       }
     }
   } catch (err: any) {
-    console.warn(`[GitHub Scraper] Could not fetch SimplifyJobs JSON: ${err?.message || err}`);
+    console.warn(`[GitHub Scraper] Could not fetch Summer 2027 JSON: ${err?.message || err}`);
   }
 
-  return listings;
+  // Live URL verification: reject any candidate whose apply link is broken or 404
+  console.log(`🐙 [GitHub Scraper] Verifying link liveness for ${candidates.length} candidate listings...`);
+  const verifiedListings = await batchVerifyUrls(candidates, 5, 5000);
+  console.log(`🐙 [GitHub Scraper] Verified ${verifiedListings.length} live active 2027 internships.`);
+
+  return verifiedListings;
+}
+
+function termsText(terms: any): string {
+  if (Array.isArray(terms)) return terms.join(" ");
+  return typeof terms === "string" ? terms : "";
 }

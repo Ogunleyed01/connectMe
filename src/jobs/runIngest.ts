@@ -4,6 +4,8 @@ import { parseJobPostingWithGemini } from "../ingest/geminiParser.js";
 import { calculatePriorityScore } from "../ingest/scorer.js";
 import { upsertInternship, generateUrlHash } from "../db/queries.js";
 import { supabase } from "../db/client.js";
+import { verifyJobUrl } from "../utils/urlVerifier.js";
+import { isPlaceholderOrMockUrl } from "../utils/security.js";
 
 export async function runIngestionPipeline() {
   console.log("==================================================");
@@ -32,8 +34,16 @@ export async function runIngestionPipeline() {
 
   let newCount = 0;
   let skippedCount = 0;
+  let rejectedDeadCount = 0;
 
   for (const feed of feeds) {
+    // 3. Reject any placeholder / mock URLs
+    if (isPlaceholderOrMockUrl(feed.applyUrl)) {
+      console.warn(`⚠️ Rejected placeholder / mock URL: ${feed.applyUrl}`);
+      rejectedDeadCount++;
+      continue;
+    }
+
     const hash = generateUrlHash(feed.applyUrl);
 
     if (existingHashes.has(hash)) {
@@ -41,8 +51,16 @@ export async function runIngestionPipeline() {
       continue;
     }
 
+    // 4. Double-check live URL reachability before AI parsing and saving
+    const urlCheck = await verifyJobUrl(feed.applyUrl, 5000);
+    if (!urlCheck.isValid) {
+      console.warn(`❌ Link verification failed for [${feed.company}] - ${feed.title} (${urlCheck.reason}): ${feed.applyUrl}`);
+      rejectedDeadCount++;
+      continue;
+    }
+
     try {
-      console.log(`\n🔍 Parsing New Match: [${feed.company}] - ${feed.title}...`);
+      console.log(`\n🔍 Parsing Verified Match: [${feed.company}] - ${feed.title}...`);
 
       const parsed = await parseJobPostingWithGemini(feed.rawText, {
         defaultCompany: feed.company,
@@ -93,6 +111,7 @@ export async function runIngestionPipeline() {
   console.log(`\n🏁 Ingestion pipeline complete!`);
   console.log(`   • Newly indexed & scored: ${newCount}`);
   console.log(`   • Already present in DB:  ${skippedCount}`);
+  console.log(`   • Rejected dead/mock URLs: ${rejectedDeadCount}`);
 }
 
 // Execute if run from CLI
